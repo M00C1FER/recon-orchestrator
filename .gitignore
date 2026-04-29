@@ -1,0 +1,8 @@
+/recon-orchestrator
+/bin/
+/dist/
+coverage.out
+scope.yaml
+*.log
+.idea/
+.vscode/

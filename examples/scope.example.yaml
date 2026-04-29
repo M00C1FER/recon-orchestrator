@@ -1,0 +1,24 @@
+# Example scope.yaml — required to run recon-orchestrator.
+# This file is the authorization interlock: without ROE acceptance + targets,
+# all tool calls refuse.
+engagement: "HackerOne — example-corp internal scope (REPLACE BEFORE USE)"
+
+# Authorized targets. Use exact host or wildcard (*.subdomain).
+targets:
+  - example.com
+  - "*.example.com"
+
+# Out-of-scope wins over targets — explicit deny.
+out_of_scope:
+  - admin.example.com
+  - billing.example.com
+
+# Rules of Engagement acceptance — required.
+roe_accepted: true
+roe_accepted_by: "roe-acceptor@example.com"
+roe_accepted_date: "2026-04-29"
+
+# Optional metadata.
+bounty: hackerone        # hackerone | bugcrowd | private
+max_rps: 5               # tool-level rate cap (passed to naabu, etc.)
+browser_allowed: false   # gates Tier-3 (Playwright/headless) tools — keep false unless renderer count < 26
