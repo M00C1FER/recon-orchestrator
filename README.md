@@ -1,3 +1,9 @@
+> ⚠️ **DEPRECATED — v0.1 archived 2026-04-30.**  This repo was a portfolio exercise. After a 12-iteration / 27-domain competitive analysis, the recommended production path is:
+>
+> **h1-brain** (https://github.com/PatrikFehrenbach/h1-brain) — 3,600+ pre-built bounty reports · **pentest-agents** (https://github.com/H-mmer/pentest-agents) — 48 agents, 26 commands, comprehensive framework
+>
+> The code below remains available for reference but is **no longer maintained**. See the linked alternatives for production use.
+
 # recon-orchestrator
 
 > Authorization-gated MCP server for ethical bug-bounty / pentest recon. Native Go (single 9.6 MB binary). Refuses to run without `scope.yaml` + ROE acceptance. PII-scrubs all output. For HackerOne / Bugcrowd researchers.
