@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -43,9 +42,6 @@ func TestNaabu_RejectsOutOfScope(t *testing.T) {
 	r := Naabu(context.Background(), s, "evil.com", "", 5*time.Second)
 	if r.OK {
 		t.Error("Naabu: expected OK=false for out-of-scope target")
-	}
-	if !errors.Is(auth.ErrTargetForbidden, auth.ErrTargetForbidden) {
-		t.Error("sentinel mismatch")
 	}
 	if r.Error == "" {
 		t.Error("Naabu: expected non-empty Error for out-of-scope target")
