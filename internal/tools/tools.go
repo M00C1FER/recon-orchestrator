@@ -57,14 +57,19 @@ func Run(ctx context.Context, tool string, argv []string, target string, timeout
 	dur := time.Since(start).String()
 
 	scrubbed := scrub.Apply(stdout.String())
+	scrubbedErr := scrub.Apply(stderr.String())
 	res := Result{
 		Tool:      tool,
 		Target:    target,
 		OK:        err == nil,
 		Stdout:    scrubbed.Output,
-		Stderr:    stderr.String(),
+		Stderr:    scrubbedErr.Output,
 		Duration:  dur,
 		ScrubHits: scrubbed.Hits,
+	}
+	// Merge stderr scrub hits into the same map.
+	for k, v := range scrubbedErr.Hits {
+		res.ScrubHits[k] += v
 	}
 	if cmd.ProcessState != nil {
 		res.Status = cmd.ProcessState.ExitCode()
@@ -103,7 +108,11 @@ func Ffuf(ctx context.Context, scope *auth.Scope, targetURL, wordlist string, ti
 	if !strings.Contains(targetURL, "FUZZ") {
 		targetURL = strings.TrimRight(targetURL, "/") + "/FUZZ"
 	}
-	argv := []string{"-u", targetURL, "-w", wordlist, "-of", "json", "-o", "/dev/stdout", "-s"}
+	maxRPS := scope.MaxRPS
+	if maxRPS == 0 {
+		maxRPS = 100
+	}
+	argv := []string{"-u", targetURL, "-w", wordlist, "-of", "json", "-o", "/dev/stdout", "-s", "-rate", fmt.Sprintf("%d", maxRPS)}
 	return Run(ctx, "ffuf", argv, targetURL, timeout)
 }
 

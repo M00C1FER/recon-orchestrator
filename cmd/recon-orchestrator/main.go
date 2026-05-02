@@ -103,8 +103,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("scope load: %v", err)
 	}
-	log.Printf("recon-orchestrator: scope %q loaded (%d targets, ROE accepted by %s)",
-		scope.Engagement, len(scope.Targets), scope.ROEAcceptedBy)
+	log.Printf("recon-orchestrator: scope %q loaded (%d targets, ROE accepted)",
+		scope.Engagement, len(scope.Targets))
 
 	srv := &server{scope: scope}
 	mux := http.NewServeMux()
@@ -129,7 +129,13 @@ func main() {
 	})
 	srv.registerTools(mux)
 
-	httpSrv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	httpSrv := &http.Server{
+		Addr:              *addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
