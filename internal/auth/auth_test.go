@@ -59,6 +59,21 @@ roe_accepted: false
 	}
 }
 
+// TestLoad_ROEWhitespaceBypassed ensures that a blank/whitespace-only
+// roe_accepted_by does not pass validation.
+func TestLoad_ROEWhitespaceBypassed(t *testing.T) {
+	p := writeScope(t, `
+targets: [example.com]
+roe_accepted: true
+roe_accepted_by: "   "
+roe_accepted_date: "   "
+`)
+	_, err := Load(p)
+	if !errors.Is(err, ErrROENotAccepted) {
+		t.Errorf("got %v want ErrROENotAccepted (whitespace-only fields)", err)
+	}
+}
+
 func TestAuthorized_AllowsExact(t *testing.T) {
 	s := &Scope{Targets: []string{"example.com"}, ROEAccepted: true}
 	if err := s.Authorized("example.com"); err != nil {
@@ -99,3 +114,33 @@ func TestAuthorized_NormalizesURL(t *testing.T) {
 		t.Errorf("got %v want nil for URL form", err)
 	}
 }
+
+// TestAuthorized_RejectsPrivateIPs verifies the SSRF guard.
+func TestAuthorized_RejectsPrivateIPs(t *testing.T) {
+	s := &Scope{Targets: []string{"example.com"}, ROEAccepted: true}
+	privateTargets := []string{
+		"127.0.0.1",
+		"localhost",
+		"10.0.0.1",
+		"192.168.1.1",
+		"172.16.0.5",
+		"169.254.169.254", // AWS metadata
+		"::1",
+	}
+	for _, target := range privateTargets {
+		err := s.Authorized(target)
+		if !errors.Is(err, ErrPrivateTarget) {
+			t.Errorf("target %q: got %v, want ErrPrivateTarget", target, err)
+		}
+	}
+}
+
+// TestAuthorized_RejectsLocalhostSubdomains verifies the SSRF guard for
+// .localhost subdomains.
+func TestAuthorized_RejectsLocalhostSubdomains(t *testing.T) {
+	s := &Scope{Targets: []string{"*.localhost"}, ROEAccepted: true}
+	if err := s.Authorized("internal.localhost"); !errors.Is(err, ErrPrivateTarget) {
+		t.Errorf("internal.localhost should be rejected as private, got %v", err)
+	}
+}
+

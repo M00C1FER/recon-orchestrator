@@ -6,6 +6,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -31,6 +32,7 @@ var (
 	ErrROENotAccepted  = errors.New("scope.yaml must set roe_accepted: true with roe_accepted_by + roe_accepted_date")
 	ErrNoTargets       = errors.New("scope.yaml must declare at least one target domain or CIDR")
 	ErrTargetForbidden = errors.New("target not in authorized scope")
+	ErrPrivateTarget   = errors.New("target resolves to a private/loopback address (SSRF guard)")
 )
 
 // Load reads and validates scope.yaml.
@@ -49,7 +51,7 @@ func Load(path string) (*Scope, error) {
 	if err := yaml.Unmarshal(b, &s); err != nil {
 		return nil, fmt.Errorf("parse scope.yaml: %w", err)
 	}
-	if !s.ROEAccepted || s.ROEAcceptedBy == "" || s.ROEAcceptedDate == "" {
+	if !s.ROEAccepted || strings.TrimSpace(s.ROEAcceptedBy) == "" || strings.TrimSpace(s.ROEAcceptedDate) == "" {
 		return nil, ErrROENotAccepted
 	}
 	if len(s.Targets) == 0 {
@@ -63,6 +65,10 @@ func (s *Scope) Authorized(target string) error {
 	host := normalizeHost(target)
 	if host == "" {
 		return fmt.Errorf("%w: %q (cannot parse host)", ErrTargetForbidden, target)
+	}
+	// SSRF guard: reject private/loopback addresses before checking scope.
+	if isPrivateHost(host) {
+		return fmt.Errorf("%w: %q", ErrPrivateTarget, target)
 	}
 	// Out-of-scope wins
 	for _, oos := range s.OutOfScope {
@@ -86,8 +92,14 @@ func normalizeHost(target string) string {
 		}
 		return strings.ToLower(u.Hostname())
 	}
-	// Strip path/port if present
+	// Strip path/port if present.
 	t := strings.ToLower(target)
+	// A bare IPv6 address (e.g. "::1", "fc00::1") contains colons but no
+	// scheme. Detect it before the generic colon-strip below.
+	if ip := net.ParseIP(t); ip != nil && ip.To4() == nil {
+		// It's an IPv6 address — return as-is (already lower-cased).
+		return t
+	}
 	if i := strings.IndexAny(t, ":/"); i >= 0 {
 		t = t[:i]
 	}
@@ -102,4 +114,43 @@ func matches(host, pattern string) bool {
 		return host == suffix || strings.HasSuffix(host, "."+suffix)
 	}
 	return host == pattern
+}
+
+// isPrivateHost returns true when host is a loopback address, an RFC-1918
+// private address, or an IPv6 link-local/loopback address. This is a
+// defence-in-depth SSRF guard: even if an operator accidentally adds a
+// private address to scope.yaml we won't scan it.
+func isPrivateHost(host string) bool {
+	// Explicit name checks first.
+	lower := strings.ToLower(host)
+	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false // non-IP hostname — not blocked here
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	// RFC-1918 and other special-use ranges.
+	private := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"100.64.0.0/10",  // RFC-6598 shared address (carrier-grade NAT)
+		"169.254.0.0/16", // link-local / cloud metadata (AWS 169.254.169.254)
+		"fc00::/7",       // IPv6 unique-local
+	}
+	for _, cidr := range private {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
